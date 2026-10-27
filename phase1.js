@@ -1,18 +1,20 @@
-function generateId() {
+const generateId = (function () {
     const idName = 'report_'
     let incrementNum = 0;
     return () => {
         ++incrementNum;
         return idName + incrementNum
     }
-}
+})()
 
-const generateID = generateId()
+generateId()
+
+const REPORT_KEYS = ["id", "type", "petType", "petName", "petName", "details", "details", "photoUrl", "location", "contact", "contact", "createdAt"];
 
 function validate(formData) {
     const error = {valid: true, errors: []}
     for (const formDataKey in formData) {
-        if (formData[formDataKey] === '') {
+        if (formData[formDataKey] === '' && REPORT_KEYS.includes(formDataKey)) {
             error.valid = false;
             error.errors.push(`${formDataKey} is required`)
         }
@@ -20,17 +22,18 @@ function validate(formData) {
     return error
 }
 
-// console.log('validate', validate({
-//     type: 'lost', petType: 'dog', petName: '',
-//     location: 'Yerevan', contact: '', details: 'Brown labrador'
-// }))
+console.log('validate', validate({
+    type: 'lost', petType: 'dog', petName: '', photoUrl: "",
+    location: 'Yerevan', contact: '', details: 'Brown labrador'
+}))
 
 function Report(report) {
-    this.id = generateID();
+    this.id = generateId();
     this.type = report.type;
     this.petType = report.petType;
     this.petName = report.petName;
     this.details = report.details;
+    this.photoUrl = report.photoUrl ? report.photoUrl : '';
     this.location = report.location;
     this.contact = report.contact;
     this.createdAt = new Date().toISOString();
@@ -55,7 +58,7 @@ const r = new Report({
 })
 
 console.log(r.toString())       // [LOST] Rex (dog) — Yerevan
-console.log(r.toJSON())         // plain object, createdAt is ISO string
+console.log('toJSON', r.toJSON())         // plain object, createdAt is ISO string
 console.log(typeof r.getAge())  // 'number'
 
 // Prototype checks
@@ -67,7 +70,6 @@ console.log(Object.getPrototypeOf(r) === Report.prototype)  // true
 function LostReport(data) {
     Report.call(this, {...data, type: 'lost'});
 }
-
 
 LostReport.prototype = Object.create(Report.prototype);
 LostReport.prototype.constructor = LostReport;
@@ -102,80 +104,59 @@ const lost = new LostReport({
     location: 'Mashtots Park', contact: '077999888'
 })
 
-// console.log("lost", lost.toJSON())
-// console.log("LostReport", LostReport)
-//
-// console.log(lost instanceof LostReport)  // true
-// console.log(lost instanceof Report)      // true
-// console.log(lost instanceof FoundReport) // false
-// console.log(lost.toString())             // [LOST] Luna (cat) — Mashtots Park
-//
-// const found = lost.markAsFound({details: 'Found near the fountain'})
-//
-// console.log(found instanceof FoundReport) // true
-// console.log(found instanceof LostReport)  // false
-// console.log(found.petName)                // Luna — carried over
-// console.log(found.id === lost.id)         // false — new record
-//
-// const reunited = found.markAsReunited()
-// console.log(reunited.status)    // 'reunited'
-// console.log(reunited instanceof FoundReport)  // false — plain object
+
+console.log(lost instanceof LostReport)  // true
+console.log(lost instanceof Report)      // true
+console.log(lost instanceof FoundReport) // false
+console.log(lost.toString())             // [LOST] Luna (cat) — Mashtots Park
+
+const found = lost.markAsFound({details: 'Found near the fountain'})
+
+console.log(found instanceof FoundReport) // true
+console.log(found instanceof LostReport)  // false
+console.log(found.petName)                // Luna — carried over
+console.log(found.id === lost.id)         // false — new record
+
+const reunited = found.markAsReunited()
+console.log(reunited.status)    // 'reunited'
+console.log(reunited instanceof FoundReport)  // false — plain object
 
 function ReportRepository() {
-    this.data = []
+    this.data = new Map();
 }
 
 ReportRepository.prototype.add = function (data) {
     const validateReport = validate(data)
-    console.log("validateReport", validateReport)
+
     if (validateReport.errors.length) {
         throw new Error('Invalid report data: ' + validateReport.join(', '))
     }
-    const record = data.type === 'lost' ? new LostReport(data).toJSON() : new FoundReport(data).toJSON();
-    this.data.push(record);
+    const record = data.type === 'lost' ? new LostReport(data) : new FoundReport(data);
+    this.data.set(record.id, record);
     return record;
 
 }
 
 ReportRepository.prototype.findById = function (id) {
-    return this.data.find((report) => report.id === id);
+    return this.data.has(id) ? this.data.get(id) : undefined;
 }
 
 ReportRepository.prototype.findAll = function (args = {}) {
-
-    // const filterEntries = Object.entries(args)
-    //
-    // if (filterEntries.length === 0) {
-    //     return [...this.data];
-    // }
-    //
-    // return this.data.filter((item) =>
-    //     filterEntries.every(([key, value]) => item[key] === value)
-    // );
-
-    if (Object.keys(args)?.length) {
-        const keys = Object.keys(args)
-        const values = Object.values(args)
-        const newData = [];
-        this.data.forEach((item) => {
-            const isAllExist = keys.every((key, index) => item[key] === values[index])
-            if (isAllExist) {
-                newData.push(item)
-            }
-        })
-        return newData
+    const results = [];
+    for (const item of this.data.values()) {
+        const matches = Object.entries(args).every(([key, value]) => item[key] === value);
+        if (matches) results.push(item);
     }
-    return [...this.data]
+    return results;
 }
 
 ReportRepository.prototype.delete = function (id) {
-    const isRemoved = this.data.filter((item) => item.id === id)
-    return !!isRemoved.length;
+    return this.data.delete(id)
 }
 
 Object.defineProperty(ReportRepository.prototype, 'count', {
     get: function () {
-        return this.data.length
+        return this.data.size
     },
     enumerable: true,
     configurable: true
@@ -196,28 +177,29 @@ const r3 = repo.add({
     details: 'Golden retriever', location: 'Komitas', contact: '055111222'
 })
 
-// console.log("ReportRepository.prototype", ReportRepository.prototype)
-// console.log('FIRST COUNT', repo.count)              // 3
-// console.log(repo.findAll())   // 3
-//
-// console.log('lost', repo.findAll({type: 'lost'}))    // 2
-// console.log('petType', repo.findAll({petType: 'dog'}))  // 2
-// console.log('lost pettype', repo.findAll({type: 'lost', petType: 'dog'}).length)  // 2
-//
-// const byId = repo.findById(r1.id)
-// console.log("byId",byId)
-// console.log(byId === r1)
-//
-// // true — same instance
-//
-// console.log("removed id", repo.delete(r2.id))      // true
-// // 2
-// console.log("removed id 2", repo.delete('fake-id'))  // false
-//
-// // Validate error
-// try {
-//     repo.add({type: 'lost', petName: ''})
-//
-// } catch (e) {
-//     console.log(e.message.startsWith('Invalid report data:'))  // true
-// }
+console.log("ReportRepository.prototype", ReportRepository.prototype)
+console.log('FIRST COUNT', repo.count)              // 3
+console.log(repo.findAll())   // 3
+
+console.log('lost', repo.findAll({type: 'lost'}))    // 2
+console.log('petType', repo.findAll({petType: 'dog'}))  // 2
+console.log('lost pet type', repo.findAll({type: 'lost', petType: 'dog'}).length)  // 2
+
+const byId = repo.findById(r1.id)
+console.log("byId", byId)
+console.log(byId === r1)
+
+// true — same instance
+console.log("removed id", repo.delete(r2.id))      // true
+
+// 2
+console.log("removed id 2", repo.delete('fake-id'))  // false
+console.log("repo", repo)
+// Validate error
+try {
+    repo.add({type: 'lost', petName: ''})
+} catch (e) {
+    console.log('IS THIS WORK', e.message.startsWith('Invalid report data:'))  // true
+}
+
+
