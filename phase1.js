@@ -126,7 +126,6 @@ FoundReport.prototype.markAsReunited = function () {
 };
 
 
-
 const lost = new LostReport({
     petType: 'cat', petName: 'Luna', details: 'Grey tabby',
     location: 'Mashtots Park', contact: '077999888'
